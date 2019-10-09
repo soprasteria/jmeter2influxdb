@@ -36,16 +36,13 @@ time,Connect,Hostname,IdleTime,Latency,allThreads,application,bytes,elapsed,grpT
 ```
 
 In the jmeter_events, 2 lines will be add :
-* time,application,testLabel,text,ts_ms
-
- text = <testLabel> + started and <testLabel> + ended
- 
- ts_ms = java timestamp start test and  java timestamp end test
+* time,testLabel started
+* time,testLabel ended
 
 Example :
 ```
-25/04/2017 10:28:59,gestdoc,tir9,tir9 started,1493116139789
-25/04/2017 10:33:59,gestdoc,tir9,tir9 ended,1493116439144
+25/04/2018 10:28:59,tir9 started
+25/04/2018 10:33:59,tir9 ended
 ```
 
 ## Commande line -help
