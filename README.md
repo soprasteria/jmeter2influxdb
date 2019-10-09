@@ -136,3 +136,5 @@ Results and monitoring PerfMon, JMXMon, DBMon
 ![Grafana display graphs2](images/grafana_example2.png)
 
 
+# License
+See the LICENSE file (Apache 2) https://www.apache.org/licenses/LICENSE-2.0
