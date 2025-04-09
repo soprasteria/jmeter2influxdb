@@ -28,6 +28,8 @@ import java.util.Date;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -39,10 +41,7 @@ import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVRecord;
-import org.apache.log4j.BasicConfigurator;
-import org.apache.log4j.Level;
-import org.apache.log4j.LogManager;
-import org.apache.log4j.Logger;
+
 import org.influxdb.InfluxDB;
 import org.influxdb.InfluxDB.ConsistencyLevel;
 import org.influxdb.InfluxDBFactory;
@@ -52,7 +51,7 @@ import org.influxdb.dto.Point.Builder;
 
 /**
 *
-* <h1>JMeter results file to Influxdb</h1>
+* <h1>JMeter results file to Influxdb 1.x</h1>
 * <p>
 * Read a result JMeter file in csv format and 
 * import all results in Influxdb Database
@@ -103,14 +102,13 @@ public class ImportJMeterLogIntoInfluxdb {
 	
 	public static final int K_WRITE_MODULO = 1000; // write informations to InfluxDB every K_WRITE_MODULO lines
 
-	private static final Logger LOGGER = LogManager.getLogger(ImportJMeterLogIntoInfluxdb.class);
+	private static final Logger LOGGER = Logger.getLogger( ImportJMeterLogIntoInfluxdb.class.getPackage().getName());
 
 	public static void main(String[] args) {
-
 		System.out.println("Begin main");
 
-		BasicConfigurator.configure();
-		Logger.getRootLogger().setLevel(Level.WARN);
+		long startMain = System.currentTimeMillis();
+		LOGGER.setLevel(Level.WARNING);
 
 		Options options = createOptions();
 		Properties parseProperties = null;
@@ -138,8 +136,23 @@ public class ImportJMeterLogIntoInfluxdb {
 		boolean bMultiplyValueBy = false;
 		double dMutiplyCoef = 0.001;
 
-		String sTmp = "";
 
+		String sTmp = "";
+		sTmp = (String) parseProperties.get(K_LEVEL_TRACE_OPT);
+		if (sTmp != null) {
+			String traceLevel = sTmp;
+			if (traceLevel.equalsIgnoreCase("WARN")) {
+				LOGGER.setLevel(Level.WARNING);
+			}
+
+			if (traceLevel.equalsIgnoreCase("INFO")) {
+				LOGGER.setLevel(Level.INFO);
+			}
+
+			if (traceLevel.equalsIgnoreCase("DEBUG")) {
+				LOGGER.setLevel(Level.FINE);
+			}
+		}
 		sTmp = (String) parseProperties.get(K_JMETER_FILE_IN_OPT);
 		if (sTmp != null) {
 			jmeterFileIn = sTmp;
@@ -200,37 +213,34 @@ public class ImportJMeterLogIntoInfluxdb {
 			bMultiplyValueBy = true;
 		}
 
-
-
-		sTmp = (String) parseProperties.get(K_LEVEL_TRACE_OPT);
-		if (sTmp != null) {
-			String traceLevel = sTmp;
-			if (traceLevel.equalsIgnoreCase("WARN")) {
-				Logger.getRootLogger().setLevel(Level.WARN);
-			}
-
-			if (traceLevel.equalsIgnoreCase("INFO")) {
-				Logger.getRootLogger().setLevel(Level.INFO);
-			}
-
-			if (traceLevel.equalsIgnoreCase("DEBUG")) {
-				Logger.getRootLogger().setLevel(Level.DEBUG);
-			}
-		}
-
+		int nbLines = 0;
 		try {
 			ImportJMeterLogIntoInfluxdb importJMeterLogIntoInfluxdb = new ImportJMeterLogIntoInfluxdb();
-			importJMeterLogIntoInfluxdb.readJMeterFileAndWriteInInfluxDB(jmeterFileIn, jmeter_save_saveservice_timestamp_format, delimiter,
+			nbLines = importJMeterLogIntoInfluxdb.readJMeterFileAndWriteInInfluxDB(jmeterFileIn, jmeter_save_saveservice_timestamp_format, delimiter,
 					influxdbUrl, influxdbUser, influxdbPassword, dbName, testLabel, application, bParseResponseMessage, bMultiplyValueBy, dMutiplyCoef);
 		} catch (Exception ex) {
-			LOGGER.error(ex);
+			LOGGER.severe(ex.toString());
+			System.out.println("End main Error (exit 1)");
 			System.exit(1);
 		}
-		System.out.println("End main (exit 0)");
+		if (nbLines == 0) {
+			System.out.println("End main Error (exit 1)");
+			System.exit(1);
+		}
+
+		// compute duration
+		long endMain = System.currentTimeMillis();
+		long durationMs = endMain - startMain;
+		double averageLineMs = 0;
+		if (nbLines > 0) {
+			averageLineMs = ((double) durationMs / nbLines);
+		}
+		LOGGER.warning("Duration = " + durationMs + " ms (" + Utils.timeFormatDuration(durationMs) + ") for number of lines = " + nbLines + ", average ms by line = " + String.format( "%.3f",averageLineMs));
+		System.out.println("End main OK (exit 0)");
 		System.exit(0);
 	}
 
-	public void readJMeterFileAndWriteInInfluxDB(String jmeterFileIn, String timeFormat, char delimiter,
+	public int readJMeterFileAndWriteInInfluxDB(String jmeterFileIn, String timeFormat, char delimiter,
 			String influxdbUrl, String influxdbUser, String influxdbPassword, String dbName, String testLabel,
 			String application, boolean bParseResponseMessage, boolean bMultiplyValueBy, double dMutiplyCoef) throws Exception {
 		InfluxDB influxDB = InfluxDBFactory.connect(influxdbUrl, influxdbUser, influxdbPassword);
@@ -253,13 +263,11 @@ public class ImportJMeterLogIntoInfluxdb {
 		DecimalFormat decimalFormat = new DecimalFormat(pattern, symbols);
 		decimalFormat.setParseBigDecimal(true);
 
-
+		int lineNumber = 1;
 		try {
 			in = new FileReader(jmeterFileIn);
 			Iterable<CSVRecord> records = CSVFormat.RFC4180.withFirstRecordAsHeader().withDelimiter(delimiter)
 					.parse(in);
-
-			int lineNumber = 1;
 
 			for (CSVRecord record : records) {
 
@@ -339,7 +347,7 @@ public class ImportJMeterLogIntoInfluxdb {
 						}
 						catch (Exception ex) {
 							jsSampler.setResponseCode(responseCodeTmp);
-							LOGGER.error("Put Response Code Error 500 because i can't parse Integer for ResponseCode :<" + sTmp + ">");
+							LOGGER.severe("Put Response Code Error 500 because i can't parse Integer for ResponseCode :<" + sTmp + ">");
 						}
 					}
 				}
@@ -367,7 +375,7 @@ public class ImportJMeterLogIntoInfluxdb {
 						catch (Exception ex) {
 							withResponseMessageLong = false;
 							jsSampler.setResponseMessageLong(responseMessageLong);
-							LOGGER.error("Put Response Message Long format, i can't parse Long for ResponseMessage :<" + sTmp + ">");
+							LOGGER.severe("Put Response Message Long format, i can't parse Long for ResponseMessage :<" + sTmp + ">");
 						}
 					}
 				}
@@ -396,7 +404,7 @@ public class ImportJMeterLogIntoInfluxdb {
 					}
 					catch (Exception ex) {
 						jsSampler.setSuccess(successTmp);
-						LOGGER.error("Put success to false because i can't parse Boolean for success :<" + sTmp + ">");
+						LOGGER.severe("Put success to false because i can't parse Boolean for success :<" + sTmp + ">");
 					}
 				}
 
@@ -532,7 +540,7 @@ public class ImportJMeterLogIntoInfluxdb {
 				batchPoints.point(point);
 
 				if ((lineNumber % K_WRITE_MODULO) == 0) {
-					LOGGER.warn("write batchPoints, lineNumber = " + lineNumber);
+					LOGGER.warning("write batchPoints, lineNumber = " + lineNumber);
 
 					influxDB.write(batchPoints);
 
@@ -552,11 +560,11 @@ public class ImportJMeterLogIntoInfluxdb {
 				batchPoints.point(pointEvt);
 			}
 
-			LOGGER.warn("End write batchPoints, lineNumber = " + lineNumber);
+			LOGGER.warning("End write batchPoints, lineNumber = " + lineNumber);
 			influxDB.write(batchPoints);
 
 		} catch (Exception ex) {
-			LOGGER.error(ex);
+			LOGGER.severe(ex.toString());
 			throw ex;
 		} finally {
 			if (in != null) {
@@ -575,6 +583,7 @@ public class ImportJMeterLogIntoInfluxdb {
 				}
 			}
 		}
+		return lineNumber;
 	}
 
 	private static Options createOptions() {

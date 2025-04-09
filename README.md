@@ -1,6 +1,6 @@
 # JMeter2Influxdb
 
-Read JMeter results in a csv file and put results in Influxdb database
+Read JMeter results in a csv file and put results in Influxdb V1.x database 
 
 The Influxdb database must be **CREATED** before import results.
 
@@ -138,3 +138,8 @@ Results and monitoring PerfMon, JMXMon, DBMon
 
 # License
 See the LICENSE file (Apache 2) https://www.apache.org/licenses/LICENSE-2.0
+
+# Versions
+Version 1.4 2025-04-09, Remove log4j 1.x library, upgrade libraries dependencies and maven plugins versions.
+
+Version 1.3 2019-10-29, First publication to GitHub.
